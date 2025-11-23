@@ -34,7 +34,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define NAME                    L"dwm-WIN"     /* Used for window name/class */
+#define NAME                    L"dwm-win32"     /* Used for window name/class */
 
 #define ISFOCUSABLE(x)          (!(x)->isminimized && ISVISIBLE(x) && IsWindowVisible((x)->hwnd))
 #define LENGTH(x)               (sizeof x / sizeof x[0])

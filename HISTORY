@@ -1,0 +1,11 @@
+dwm-win32 is a port of the X11 window manager dwm to Microsoft Windows, created
+by Marc Andre Tanner in 2009. He published dwm-win32-alpha1 to the suckless
+mailing list (https://lists.suckless.org/dwm/0903/7775.html), and released a
+second alpha shortly thereafter.
+
+Many modifications and improvements have been made since by various
+contributors, most notably Prabir Shrestha in 2020. Patches have been
+selectively backported from his fork.
+
+This project is currently maintained by Vessuria, adding multi-monitor support
+and updating the software for newer Windows versions.

@@ -1,4 +1,4 @@
-DEL config.h
+:: DEL config.h
 IF NOT EXIST config.h COPY config.def.h config.h
 zig cc ^
     -o dwm-win32.exe dwm-win32.c ^
