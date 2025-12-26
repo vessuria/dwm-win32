@@ -159,7 +159,8 @@ static void detachstack(Client *c);
 static void drawbar(Monitor *m);
 static void drawsquare(bool filled, bool empty, bool invert, unsigned long col[ColLast]);
 static void drawtext(const wchar_t *text, unsigned long col[ColLast], bool invert);
-void drawborder(Client *c, COLORREF color);
+static void drawborder(Client *c, COLORREF color);
+static void nocorners(Client* c);
 void eprint(bool premortem, const wchar_t *errstr, ...);
 static void focus(Client *c);
 static void focusstack(const Arg *arg);
@@ -178,7 +179,6 @@ static void quit(const Arg *arg);
 static void resize(Client *c, int x, int y, int w, int h);
 static void restack(void);
 static BOOL CALLBACK scan(HWND hwnd, LPARAM lParam);
-static void setborder(Client *c, bool border);
 static void setvisibility(HWND hwnd, bool visibility);
 static void setlayout(const Arg *arg);
 static void setmfact(const Arg *arg);
@@ -191,7 +191,6 @@ static void tag(const Arg *arg);
 static int textnw(const wchar_t *text, unsigned int len);
 static void tile(void);
 static void togglebar(const Arg *arg);
-static void toggleborder(const Arg *arg);
 static void toggleexplorer(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void toggletag(const Arg *arg);
@@ -609,6 +608,7 @@ setselected(Client *c) {
         for (c = stack; c && (!ISVISIBLE(c) || c->mon != selmon); c = c->snext);
     if (sel && sel != c)
         drawborder(sel, normbordercolor);
+        if (!roundcorners) nocorners(c);
     if (c) {
         if (c->isurgent)
             clearurgent(c);
@@ -760,7 +760,7 @@ ismanageable(HWND hwnd) {
         wcsstr(title, L"Windows Shell Experience Host") ||
         wcsstr(title, L"Microsoft Text Input Application") ||
         wcsstr(title, L"Action center") ||
-        wcsstr(title, L"New Notification") ||
+        wcsstr(title, L"New notification") ||
         wcsstr(title, L"Date and Time Information") ||
         wcsstr(title, L"Volume Control") ||
         wcsstr(title, L"Network Connections") ||
@@ -1081,18 +1081,17 @@ drawborder(Client *c, COLORREF color) {
     );
 }
 
+/* Only works on Windows 11 and later */
 void
-setborder(Client *c, bool border) {
-    if (!c->ignoreborder) {
-        if (border) {
-            SetWindowLong(c->hwnd, GWL_STYLE, (GetWindowLong(c->hwnd, GWL_STYLE) | (WS_CAPTION | WS_SIZEBOX)));
-        } else {
-            SetWindowLong(c->hwnd, GWL_STYLE, (GetWindowLong(c->hwnd, GWL_STYLE) & ~(WS_CAPTION | WS_SIZEBOX)) | WS_BORDER | WS_THICKFRAME);
-            SetWindowLong(c->hwnd, GWL_EXSTYLE, (GetWindowLong(c->hwnd, GWL_EXSTYLE) & ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE)));
-        }
-        SetWindowPos(c->hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER );
-        c->border = border;
-    }
+nocorners(Client* c) {
+    int sharpen = 1;
+    if (!c || !IsWindow(c->hwnd)) return;
+    DwmSetWindowAttribute(
+        c->hwnd,
+        33,
+        &sharpen,
+        4
+    );
 }
 
 void
@@ -1356,13 +1355,6 @@ togglebar(const Arg *arg) {
 }
 
 void
-toggleborder(const Arg *arg) {
-    if (!sel)
-        return;
-    setborder(sel, !sel->border);
-}
-
-void
 toggleexplorer(const Arg *arg) {
     HWND hwnd = FindWindowW(L"Progman", L"Program Manager");
     if (hwnd)
@@ -1382,7 +1374,6 @@ togglefloating(const Arg *arg) {
     if (!sel)
         return;
     sel->isfloating = !sel->isfloating || sel->isfixed;
-    setborder(sel, sel->isfloating);
     if (sel->isfloating)
         resize(sel, sel->x, sel->y, sel->w, sel->h);
     arrange();
@@ -1417,8 +1408,6 @@ void
 unmanage(Client *c) {
     if (c->wasvisible)
         setvisibility(c->hwnd, true);
-    if (!c->isfloating)
-        setborder(c, true);
     detach(c);
     detachstack(c);
     if (sel == c)
