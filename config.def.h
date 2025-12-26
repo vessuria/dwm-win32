@@ -1,8 +1,8 @@
 /* See LICENSE file for copyright and license details. */
 #define DEBUG ${DEBUG}
 
-static const wchar_t *fontname         = L"Fira Code";
-static const unsigned int fontsize  = 20;
+static const wchar_t *fontname         = L"Terminus (TTF) for Windows";
+static const unsigned int fontsize  = 16;
 
 /* appearance, colors are specified in the form 0x00bbggrr or with the RGB(r, g, b) macro */
 #define normbordercolor 0x00444444
@@ -40,9 +40,9 @@ static Rule rules[] = {
     { L"PPTFrameClass",                      NULL,                                   0,          false,          true }, /* PowerPoint */
     { L"OpusApp",                            NULL,                                   0,          false,          true }, /* Word */
     { NULL,                                  L"OneNote",                             0,          false,          true }, /* OneNote */
-    { NULL,                                 L"Snip & Sketch",                        0,          true,           true },
+    { NULL,                                  L"Snip & Sketch",                       0,          true,           true },
     { L"Chrome_WidgetWin_1",                 L"Google Chrome",                       0,          false,          true },
-    { NULL,                                 L"vimrun.exe",                           0,          true,           true },
+    { NULL,                                  L"vimrun.exe",                          0,          true,           true },
 };
 
 /* layout(s) */
