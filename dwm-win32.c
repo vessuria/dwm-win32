@@ -32,7 +32,6 @@
 #include <string.h>
 #include <shellapi.h>
 #include <stdbool.h>
-#include <time.h>
 
 #define NAME                    L"dwm-win32"     /* Used for window name/class */
 
@@ -443,11 +442,9 @@ drawbar(Monitor *m) {
     unsigned int i, occ = 0, urg = 0;
     unsigned long *col;
     Client *c;
-    time_t timer;
-    struct tm date;
-    wchar_t timestr[256];
-    wchar_t localtimestr[256];
-    wchar_t utctimestr[256];
+
+    /* set status text */
+    memcpy(stext, NAME, sizeof(stext));
 
     /* compute occupancy only for this monitor */
     for (c = clients; c; c = c->next) {
@@ -473,6 +470,7 @@ drawbar(Monitor *m) {
     }
     else
         x = dc.x;
+
     dc.w = TEXTW(stext);
     dc.x = m->ww - dc.w;
     if (dc.x < x) {
@@ -480,27 +478,6 @@ drawbar(Monitor *m) {
         dc.w = m->ww - x;
     }
     drawtext(stext, dc.norm, false);
-
-    if (showclock) {
-        /* Draw Date Time */
-        timer = time(NULL);
-        localtime_s(&date, &timer);
-        wcsftime(localtimestr, 255, clockfmt, &date);
-
-        if (showutcclock) {
-            timer = time(NULL);
-            gmtime_s(&date, &timer);
-            wcsftime(utctimestr, 255, clockfmt, &date);
-
-            swprintf(timestr, sizeof(timestr) / sizeof(timestr[0]), L"%s | UTC: %s", localtimestr, utctimestr);
-        } else {
-            swprintf(timestr, sizeof(timestr) / sizeof(timestr[0]), L"%s", localtimestr);
-        }
-
-        dc.w = TEXTW(timestr);
-        dc.x = m->ww - dc.w;
-        drawtext(timestr, dc.norm, false);
-    }
 
     if ((dc.w = dc.x - x) > m->bh) {
         dc.x = x;
@@ -1249,7 +1226,7 @@ setbar(HINSTANCE hInstance, Monitor *m) {
     ReleaseDC(m->barhwnd, dc.hdc);
 
     PostMessage(m->barhwnd, WM_PAINT, 0, 0);
-    SetTimer(m->barhwnd, 1, clock_interval, NULL);
+    SetTimer(m->barhwnd, 1, status_interval, NULL);
 }
 
 void

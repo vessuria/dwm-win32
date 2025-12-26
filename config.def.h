@@ -17,8 +17,6 @@ static const unsigned int textmargin  = 15;       /* margin for the text display
 static bool showbar                   = true;     /* false means no bar */
 static bool topbar                    = true;     /* false means bottom bar */
 static bool roundcorners              = false;    /* false means no round corners (Windows 11) */
-static bool showclock                 = true;     /* false means no clock */
-static bool showutcclock              = true;     /* false means no utc clock */
 static bool showexploreronstart       = false;    /* false means do not show explorer/task bar on start */
 
 /* tagging */
@@ -64,8 +62,7 @@ static Layout layouts[] = {
     { MODKEY|MOD_SHIFT,             KEY,      tag,            {.ui = 1 << TAG} }, \
     { MODKEY|MOD_CONTROL|MOD_SHIFT, KEY,      toggletag,      {.ui = 1 << TAG} },
 
-static wchar_t clockfmt[] = L"%m/%d/%Y %a %H:%M";
-static int clock_interval = 15000;
+static int status_interval = 15000;
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const wchar_t*[]){ L"/bin/sh", L"-c", cmd, NULL } }
