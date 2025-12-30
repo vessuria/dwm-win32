@@ -66,6 +66,8 @@ typedef struct {
     unsigned long norm[ColLast];
     unsigned long sel[ColLast];
     HDC hdc;
+    HPEN pen;
+    HBRUSH brush[2]; // 0=norm, 1=sel
 } DC;
 
 DC dc;
@@ -152,7 +154,7 @@ static void arrange(void);
 static void arrangemon(Monitor *m);
 static void attach(Client *c);
 static void attachstack(Client *c);
-static void cleanup();
+static void cleanup(void);
 static void clearurgent(Client *c);
 static void detach(Client *c);
 static void detachstack(Client *c);
@@ -237,6 +239,7 @@ static Monitor *selmon = NULL;
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { wchar_t limitexceeded[sizeof(unsigned int) * 8 < LENGTH(tags) ? -1 : 1]; };
+static int tagw[LENGTH(tags)];
 
 /* elements of the window whose color should be set to the values in the array below */
 static int colorwinelements[] = { COLOR_ACTIVEBORDER, COLOR_INACTIVEBORDER };
@@ -305,8 +308,6 @@ void
 arrangemon(Monitor *m) {
     curmon = m;
 
-    int wx = m->wx, wy = m->wy, ww = m->ww, wh = m->wh, bh = m->bh;
-
     if (mon_get_layout(m, m->sellt)->arrange)
         mon_get_layout(m, m->sellt)->arrange();
 
@@ -343,7 +344,7 @@ buttonpress(unsigned int button, POINTS *point, Monitor *m) {
 
     i = x = 0;
 
-    do { x += TEXTW(tags[i]); } while (point->x >= x && ++i < LENGTH(tags));
+    do { x += tagw[i]; } while (point->x >= x && ++i < LENGTH(tags));
     if (i < LENGTH(tags)) {
         click = ClkTagBar;
         arg.ui = 1 << i;
@@ -369,7 +370,7 @@ buttonpress(unsigned int button, POINTS *point, Monitor *m) {
 }
 
 void
-cleanup() {
+cleanup(void) {
     int i;
 
     /* kill timers on bars */
@@ -410,6 +411,10 @@ cleanup() {
 
     if (font)
         DeleteObject(font);
+
+    if (dc.pen) DeleteObject(dc.pen);
+    if (dc.brush[0]) DeleteObject(dc.brush[0]);
+    if (dc.brush[1]) DeleteObject(dc.brush[1]);
 }
 
 void
@@ -458,7 +463,7 @@ drawbar(Monitor *m) {
 
     dc.x = 0;
     for (i = 0; i < LENGTH(tags); i++) {
-        dc.w = TEXTW(tags[i]);
+        dc.w = tagw[i];
         unsigned int cur_tagset = m->tagset[m->seltags];
         col = cur_tagset & 1 << i ? dc.sel : dc.norm;
         drawtext(tags[i], col, urg & 1 << i);
@@ -513,15 +518,25 @@ drawsquare(bool filled, bool empty, bool invert, unsigned long col[ColLast]) {
 void
 drawtext(const wchar_t *text, unsigned long col[ColLast], bool invert) {
     RECT r = { .left = dc.x, .top = dc.y, .right = dc.x + dc.w, .bottom = dc.y + dc.h };
+    HPEN pen;
+    HBRUSH brush;
 
-    HPEN pen = CreatePen(PS_SOLID, borderpx, selbordercolor);
-    HBRUSH brush = CreateSolidBrush(col[invert ? ColFG : ColBG]);
+    if (!invert) {
+        pen = dc.pen;
+        brush = (col == dc.norm) ? dc.brush[0] : dc.brush[1];
+    } else {
+        pen = CreatePen(PS_SOLID, borderpx, selbordercolor);
+        brush = CreateSolidBrush(col[ColFG]);
+    }
+
     SelectObject(dc.hdc, pen);
     SelectObject(dc.hdc, brush);
     FillRect(dc.hdc, &r, brush);
 
-    DeleteObject(brush);
-    DeleteObject(pen);
+    if (invert) {
+        DeleteObject(brush);
+        DeleteObject(pen);
+    }
 
     SetBkMode(dc.hdc, TRANSPARENT);
     SetTextColor(dc.hdc, col[invert ? ColBG : ColFG]);
@@ -530,54 +545,52 @@ drawtext(const wchar_t *text, unsigned long col[ColLast], bool invert) {
         font = CreateFontW(fontsize, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, fontname);
         if (!font)
             font = (HFONT)GetStockObject(SYSTEM_FONT);
-        }
+    }
     SelectObject(dc.hdc, font);
 
     DrawTextW(dc.hdc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
-
 void
 eprint(bool premortem, const wchar_t *errstr, ...) {
     va_list ap;
-    int num_of_chars;
-    wchar_t* buffer = NULL;
-    size_t buffer_num_of_chars;
-    wchar_t program_name[] = L"dwm-win32: ";
+    wchar_t *buf = NULL;
+    wchar_t *prog = L"dwm-win32: ";
+    int len;
+    size_t buflen;
 
     va_start(ap, errstr);
 
-    num_of_chars = _vscwprintf(errstr, ap);
-    if (num_of_chars == -1) {
+    len = _vscwprintf(errstr, ap);
+    if (len == -1) {
         OutputDebugStringW(L"_vscwprintf failed in eprint");
         goto cleanup;
     }
 
-    buffer_num_of_chars = wcslen(program_name) + num_of_chars + 1;
-    buffer = (wchar_t*)calloc(buffer_num_of_chars, sizeof(wchar_t));
-    if (buffer == NULL) {
+    buflen = wcslen(prog) + len + 1;
+    if (!(buf = calloc(buflen, sizeof(wchar_t)))) {
         OutputDebugStringW(L"calloc failed in eprint");
         goto cleanup;
     }
 
-    if (wcscpy_s(buffer, buffer_num_of_chars, program_name) != 0) {
+    if (wcscpy_s(buf, buflen, prog) != 0) {
         OutputDebugStringW(L"wcscpy_s failed in eprint");
         goto cleanup;
     }
 
-    if (vswprintf(buffer + wcslen(program_name), num_of_chars + 1, errstr, ap) < 0) {
+    if (vswprintf(buf + wcslen(prog), len + 1, errstr, ap) < 0) {
         OutputDebugStringW(L"vswprintf failed in eprint");
         goto cleanup;
     }
 
-    OutputDebugStringW(buffer);
+    OutputDebugStringW(buf);
 
     if (premortem)
-        MessageBoxW(NULL, buffer, L"dwm-win32 has encountered an error", MB_ICONERROR | MB_SETFOREGROUND | MB_OK);
+        MessageBoxW(NULL, buf, L"dwm-win32 has encountered an error", MB_ICONERROR | MB_SETFOREGROUND | MB_OK);
 
 cleanup:
-    if (buffer != NULL)
-        free(buffer);
-    
+    if (buf != NULL)
+        free(buf);
+
     va_end(ap);
 }
 
@@ -701,67 +714,74 @@ iscloaked(HWND hwnd) {
 
 bool
 ismanageable(HWND hwnd) {
+    HWND parent;
+    int style, exstyle;
+    bool pok, istool, isapp;
+    const wchar_t *classname, *title;
+    static const wchar_t *titles[] = {
+        L"Windows Shell Experience Host",
+        L"Microsoft Text Input Application",
+        L"Action center",
+        L"New notification",
+        L"Date and Time Information",
+        L"Volume Control",
+        L"Network Connections",
+        L"Cortana",
+        L"Start",
+        L"Windows Default Lock Screen",
+        L"Search",
+    };
+    static const wchar_t *classes[] = {
+        L"ForegroundStaging",
+        L"ApplicationManager_DesktopShellWindow",
+        L"Static",
+        L"Scrollbar",
+        L"Progman",
+        L"OperationStatusWindow",
+    };
+    unsigned int i;
+
     if (hwnd == 0)
         return false;
 
     if (getclient(hwnd))
         return true;
 
-    HWND parent = GetParent(hwnd);
-    int style = GetWindowLong(hwnd, GWL_STYLE);
-    int exstyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-    bool pok = (parent != 0 && ismanageable(parent));
-    bool istool = exstyle & WS_EX_TOOLWINDOW;
-    bool isapp = exstyle & WS_EX_APPWINDOW;
-    bool noactiviate = exstyle & WS_EX_NOACTIVATE;
-    const wchar_t *classname = getclientclassname(hwnd);
-    const wchar_t *title = getclienttitle(hwnd);
+    parent = GetParent(hwnd);
+    style = GetWindowLong(hwnd, GWL_STYLE);
+    exstyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+    pok = (parent != 0 && ismanageable(parent));
+    istool = exstyle & WS_EX_TOOLWINDOW;
+    isapp = exstyle & WS_EX_APPWINDOW;
 
     if (pok && !getclient(parent))
         manage(parent);
 
-    /* Skip untitled or disabled windows unless they are captioned. */
     if (GetWindowTextLength(hwnd) == 0) {
-        bool looks_like_app = isapp || (style & WS_CAPTION);
-        if (!looks_like_app)
+        if (!isapp && !(style & WS_CAPTION))
             return false;
     }
 
     if (style & WS_DISABLED)
         return false;
-
-    if (noactiviate)
+    if (exstyle & WS_EX_NOACTIVATE)
         return false;
-
-    /* Skip inactive suspended modern apps */
     if (iscloaked(hwnd))
         return false;
 
-    if (wcsstr(classname, L"Windows.UI.Core.CoreWindow") && (
-        wcsstr(title, L"Windows Shell Experience Host") ||
-        wcsstr(title, L"Microsoft Text Input Application") ||
-        wcsstr(title, L"Action center") ||
-        wcsstr(title, L"New notification") ||
-        wcsstr(title, L"Date and Time Information") ||
-        wcsstr(title, L"Volume Control") ||
-        wcsstr(title, L"Network Connections") ||
-        wcsstr(title, L"Cortana") ||
-        wcsstr(title, L"Start") ||
-        wcsstr(title, L"Windows Default Lock Screen") ||
-        wcsstr(title, L"Search"))) {
-        return false;
+    classname = getclientclassname(hwnd);
+    title = getclienttitle(hwnd);
+
+    if (wcsstr(classname, L"Windows.UI.Core.CoreWindow")) {
+        for (i = 0; i < LENGTH(titles); i++)
+            if (wcsstr(title, titles[i]))
+                return false;
     }
 
-    if (wcsstr(classname, L"ForegroundStaging") ||
-        wcsstr(classname, L"ApplicationManager_DesktopShellWindow") ||
-        wcsstr(classname, L"Static") ||
-        wcsstr(classname, L"Scrollbar") ||
-        wcsstr(classname, L"Progman") ||
-        wcsstr(classname, L"OperationStatusWindow")) {
-        return false;
-    }
+    for (i = 0; i < LENGTH(classes); i++)
+        if (wcsstr(classname, classes[i]))
+            return false;
 
-    /* Manage either top-level visible windows or tool windows with manageable parents */
     if ((parent == 0 && IsWindowVisible(hwnd)) || pok) {
         if ((!istool && parent == 0) || (istool && pok))
             return true;
@@ -786,14 +806,22 @@ update_client_monitor(Client *c) {
     }
 }
 
-Client*
-manage(HWND hwnd) {    
-    Client *c = getclient(hwnd);
+Client *
+manage(HWND hwnd) {
+    Client *c;
+    HANDLE hproc;
+    DWORD len;
+    wchar_t *buf;
+    WINDOWINFO wi = { .cbSize = sizeof(WINDOWINFO) };
+    static WINDOWPLACEMENT wp = {
+        .length = sizeof(WINDOWPLACEMENT),
+        .showCmd = SW_RESTORE,
+    };
 
+    c = getclient(hwnd);
     if (c)
         return c;
 
-    WINDOWINFO wi = { .cbSize = sizeof(WINDOWINFO) };
     if (!GetWindowInfo(hwnd, &wi))
         return NULL;
 
@@ -813,26 +841,21 @@ manage(HWND hwnd) {
     if (!c->mon) c->mon = selmon ? selmon : mons;
 
     GetWindowThreadProcessId(hwnd, &c->processid);
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, c->processid);
-    if (hProc) {
-        DWORD buf_size = MAX_PATH;
-        wchar_t *buf = (wchar_t*)calloc(buf_size, sizeof(wchar_t));
-        if (buf && QueryFullProcessImageNameW(hProc, 0, buf, &buf_size)) {
+    hproc = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, c->processid);
+    if (hproc) {
+        len = MAX_PATH;
+        buf = (wchar_t*)calloc(len, sizeof(wchar_t));
+        if (buf && QueryFullProcessImageNameW(hproc, 0, buf, &len)) {
             c->processname = buf;
         } else {
             if (buf) free(buf);
         }
-        CloseHandle(hProc);
+        CloseHandle(hproc);
     }
-
-    static WINDOWPLACEMENT wp = {
-        .length = sizeof(WINDOWPLACEMENT),
-        .showCmd = SW_RESTORE,
-    };
 
     if (IsWindowVisible(hwnd))
         SetWindowPlacement(hwnd, &wp);
-    
+
     c->isfloating = (!(wi.dwStyle & WS_MINIMIZEBOX) && !(wi.dwStyle & WS_MAXIMIZEBOX));
 
     c->ignoreborder = iscloaked(hwnd);
@@ -923,62 +946,62 @@ restack(void) {
     /* No z-order restacking required for this port */
 }
 
-LRESULT CALLBACK barhandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
+LRESULT CALLBACK
+barhandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     Monitor *m = bar_monitor_from_hwnd(hwnd);
     switch (msg) {
-        case WM_CREATE:
-            updatebars();
-            break;
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            BeginPaint(hwnd, &ps);
-            drawbar(m);
-            EndPaint(hwnd, &ps);
-            break;
-        }
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_MBUTTONDOWN:
-            buttonpress(msg, &MAKEPOINTS(lParam), m);
-            break;
-        case WM_TIMER:
-            drawbar(m);
-            break;
-        default:
-            return DefWindowProc(hwnd, msg, wParam, lParam); 
+    case WM_CREATE:
+        updatebars();
+        break;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        BeginPaint(hwnd, &ps);
+        drawbar(m);
+        EndPaint(hwnd, &ps);
+        break;
+    }
+    case WM_LBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+        buttonpress(msg, &MAKEPOINTS(lParam), m);
+        break;
+    case WM_TIMER:
+        drawbar(m);
+        break;
+    default:
+        return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
     return 0;
 }
 
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
+LRESULT CALLBACK
+WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-        case WM_CREATE:
-            break;
-        case WM_CLOSE:
-            cleanup();
-            break;
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            break;
-        case WM_HOTKEY:
-            if (wParam > 0 && wParam < LENGTH(keys)) {
-                keys[wParam].func(&(keys[wParam ].arg));
-            }
-            break;
-        case WM_DISPLAYCHANGE:
-        case WM_DEVICECHANGE:
-            updategeom();
-            updatebars();
-            arrange();
-            break;
-        default:
-            if (msg == shellhookid) { /* Handle the shell hook message */
-                Client *c = getclient((HWND)lParam);
-                switch (wParam & 0x7fff) {
-                    case HSHELL_WINDOWCREATED:
+    case WM_CREATE:
+        break;
+    case WM_CLOSE:
+        cleanup();
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    case WM_HOTKEY:
+        if (wParam > 0 && wParam < LENGTH(keys)) {
+            keys[wParam].func(&(keys[wParam].arg));
+        }
+        break;
+    case WM_DISPLAYCHANGE:
+    case WM_DEVICECHANGE:
+        updategeom();
+        updatebars();
+        arrange();
+        break;
+    default:
+        if (msg == shellhookid) { /* Handle the shell hook message */
+            Client *c = getclient((HWND)lParam);
+            switch (wParam & 0x7fff) {
+            case HSHELL_WINDOWCREATED:
                         if (!c && ismanageable((HWND)lParam)) {
                             c = manage((HWND)lParam);
                             managechildwindows(c);
@@ -1115,6 +1138,9 @@ setmfact(const Arg *arg) {
 
 void
 setup(HINSTANCE hInstance) {
+    WNDCLASSEXW wc;
+    HWND hwnd;
+
     /* initialize global fallback layouts */
     lt[0] = &layouts[0];
     lt[1] = &layouts[1 % LENGTH(layouts)];
@@ -1127,39 +1153,54 @@ setup(HINSTANCE hInstance) {
     dc.sel[ColBG] = selbgcolor;
     dc.sel[ColFG] = selfgcolor;
 
+    dc.pen = CreatePen(PS_SOLID, borderpx, selbordercolor);
+    dc.brush[0] = CreateSolidBrush(dc.norm[ColBG]);
+    dc.brush[1] = CreateSolidBrush(dc.sel[ColBG]);
+
     /* save colors so we can restore them in cleanup */
     for (unsigned int i = 0; i < LENGTH(colorwinelements); i++)
         colors[0][i] = GetSysColor(colorwinelements[i]);
-    
+
     SetSysColors(LENGTH(colorwinelements), colorwinelements, colors[1]);
 
     SystemParametersInfoW(SPI_SETACTIVEWINDOWTRACKING, 0, (void *)(INT_PTR)!focusonclick, 0);
     SystemParametersInfoW(SPI_SETACTIVEWNDTRKTIMEOUT, 0, (void *)(INT_PTR)0, 0);
 
-    HWND hwnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    hwnd = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hwnd)
         setvisibility(hwnd, showexploreronstart);
 
-    WNDCLASSEXW winClass;
-    winClass.cbSize = sizeof(WNDCLASSEXW);
-    winClass.style = 0;
-    winClass.lpfnWndProc = WndProc;
-    winClass.cbClsExtra = 0;
-    winClass.cbWndExtra = 0;
-    winClass.hInstance = hInstance;
-    winClass.hIcon = NULL;
-    winClass.hIconSm = NULL;
-    winClass.hCursor = NULL;
-    winClass.hbrBackground = NULL;
-    winClass.lpszMenuName = NULL;
-    winClass.lpszClassName = NAME;
+    wc.cbSize = sizeof(WNDCLASSEXW);
+    wc.style = 0;
+    wc.lpfnWndProc = WndProc;
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = 0;
+    wc.hInstance = hInstance;
+    wc.hIcon = NULL;
+    wc.hIconSm = NULL;
+    wc.hCursor = NULL;
+    wc.hbrBackground = NULL;
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = NAME;
 
-    if (!RegisterClassExW(&winClass))
+    if (!RegisterClassExW(&wc))
         die(L"Error registering window class");
 
     dwmhwnd = CreateWindowExW(0, NAME, NAME, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
     if (!dwmhwnd)
         die(L"Error creating window");
+
+    /* One-time calculation of tag widths */
+    dc.hdc = GetWindowDC(dwmhwnd);
+    if (!font) {
+        font = CreateFontW(fontsize, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, fontname);
+        if (!font)
+            font = (HFONT)GetStockObject(SYSTEM_FONT);
+    }
+    SelectObject(dc.hdc, font);
+    for (unsigned int i = 0; i < LENGTH(tags); i++)
+        tagw[i] = TEXTW(tags[i]);
+    ReleaseDC(dwmhwnd, dc.hdc);
 
     /* build monitors and bars */
     buildmonitors();
@@ -1192,21 +1233,23 @@ setup(HINSTANCE hInstance) {
 
 void
 setbar(HINSTANCE hInstance, Monitor *m) {
-    WNDCLASSW winClass;
-    memset(&winClass, 0, sizeof winClass);
+    WNDCLASSW wc;
+    HFONT hfont;
 
-    winClass.style = 0;
-    winClass.lpfnWndProc = barhandler;
-    winClass.cbClsExtra = 0;
-    winClass.cbWndExtra = 0;
-    winClass.hInstance = hInstance;
-    winClass.hIcon = NULL;
-    winClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-    winClass.hbrBackground = NULL;
-    winClass.lpszMenuName = NULL;
-    winClass.lpszClassName = L"dwm-bar";
+    memset(&wc, 0, sizeof wc);
 
-    RegisterClassW(&winClass);
+    wc.style = 0;
+    wc.lpfnWndProc = barhandler;
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = 0;
+    wc.hInstance = hInstance;
+    wc.hIcon = NULL;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = NULL;
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = L"dwm-bar";
+
+    RegisterClassW(&wc);
 
     m->barhwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW,
@@ -1230,7 +1273,7 @@ setbar(HINSTANCE hInstance, Monitor *m) {
 
     /* calculate width of the largest layout symbol */
     dc.hdc = GetWindowDC(m->barhwnd);
-    HFONT hfont = (HFONT)GetStockObject(SYSTEM_FONT); 
+    hfont = (HFONT)GetStockObject(SYSTEM_FONT);
     SelectObject(dc.hdc, hfont);
 
     m->blw = 0;
@@ -1247,8 +1290,9 @@ setbar(HINSTANCE hInstance, Monitor *m) {
 
 void
 showclientinfo(const Arg *arg) {
-    if (!sel) return;
     wchar_t buffer[1024];
+
+    if (!sel) return;
     swprintf(buffer, LENGTH(buffer),
         L"Title: %s\nClass: %s\nProcess: %s\n\nFloating: %s\nTags: %u",
         getclienttitle(sel->hwnd),
@@ -1689,14 +1733,16 @@ sendmon(const Arg *arg) {
     arrange();
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
+int WINAPI
+wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
+    MSG msg;
+    HANDLE mutex;
+
     (void)hPrevInstance; (void)lpCmdLine; (void)nShowCmd;
 
     SetProcessDPIAware();
 
-    MSG msg;
-
-    HANDLE mutex = CreateMutexW(NULL, TRUE, NAME);
+    mutex = CreateMutexW(NULL, TRUE, NAME);
     if (mutex == NULL)
         die(L"Failed to create dwm-win32 mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS)

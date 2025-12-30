@@ -1,0 +1,35 @@
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+ContinuationIndentWidth: 4
+
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+AlwaysBreakAfterDefinitionReturnType: TopLevel
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Right
+AlignOperands:   true
+AlignTrailingComments: true
+
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+PointerAlignment: Right
+
+ColumnLimit:     100
