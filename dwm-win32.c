@@ -587,14 +587,13 @@ setselected(Client *c) {
         for (c = stack; c && (!ISVISIBLE(c) || c->mon != selmon); c = c->snext);
     if (sel && sel != c)
         drawborder(sel, normbordercolor);
-        if (!roundcorners) nocorners(c);
+    if (!roundcorners) nocorners(sel);
     if (c) {
         if (c->isurgent)
             clearurgent(c);
         detachstack(c);
         attachstack(c);
         drawborder(c, selbordercolor);
-        selmon = c->mon;
     }
     sel = c;
     for (Monitor *m = mons; m; m = m->next) drawbar(m);
@@ -708,7 +707,7 @@ ismanageable(HWND hwnd) {
     if (getclient(hwnd))
         return true;
 
-    HWND parent = GetParent(hwnd);    
+    HWND parent = GetParent(hwnd);
     int style = GetWindowLong(hwnd, GWL_STYLE);
     int exstyle = GetWindowLong(hwnd, GWL_EXSTYLE);
     bool pok = (parent != 0 && ismanageable(parent));
@@ -721,9 +720,12 @@ ismanageable(HWND hwnd) {
     if (pok && !getclient(parent))
         manage(parent);
 
-    /* Skip untitled or disabled */
-    if (GetWindowTextLength(hwnd) == 0)
-        return false;
+    /* Skip untitled or disabled windows unless they are captioned. */
+    if (GetWindowTextLength(hwnd) == 0) {
+        bool looks_like_app = isapp || (style & WS_CAPTION);
+        if (!looks_like_app)
+            return false;
+    }
 
     if (style & WS_DISABLED)
         return false;
@@ -754,7 +756,8 @@ ismanageable(HWND hwnd) {
         wcsstr(classname, L"ApplicationManager_DesktopShellWindow") ||
         wcsstr(classname, L"Static") ||
         wcsstr(classname, L"Scrollbar") ||
-        wcsstr(classname, L"Progman")) {
+        wcsstr(classname, L"Progman") ||
+        wcsstr(classname, L"OperationStatusWindow")) {
         return false;
     }
 
@@ -909,7 +912,9 @@ resize(Client *c, int x, int y, int w, int h) {
         c->y = y;
         c->w = w;
         c->h = h;
-        SetWindowPos(c->hwnd, HWND_TOP, c->x, c->y, c->w, c->h, SWP_NOACTIVATE);
+        /* If the window can't be managed, we assign it as a floating window. */
+        if (!SetWindowPos(c->hwnd, HWND_TOP, c->x, c->y, c->w, c->h, SWP_NOACTIVATE))
+            c->isfloating = true;
     }
 }
 
@@ -1297,13 +1302,16 @@ textnw(const wchar_t *text, unsigned int len) {
 void
 tile(void) {
     unsigned int i, n = 0;
-    Client *c;
+    Client *c, *m = NULL;
 
     for (c = clients; c; c = c->next) {
         if (c->mon != curmon) continue;
-        if (!c->isfloating && ISVISIBLE(c)) n++;
+        if (!c->isfloating && ISVISIBLE(c)) {
+            if (!m) m = c;
+            n++;
+        }
     }
-    if (n == 0)
+    if (n == 0 || !m)
         return;
 
     /* master */
@@ -1314,19 +1322,18 @@ tile(void) {
         return;
 
     /* tile stack */
-    int x = (curmon->wx + mw > c->x + c->w) ? c->x + c->w + 2 * c->bw : curmon->wx + mw;
+    int x = curmon->wx + mw;
     int y = curmon->wy;
-    int w = (curmon->wx + mw > c->x + c->w) ? curmon->wx + curmon->ww - x : curmon->ww - mw;
+    int w = curmon->ww - mw;
     int h = curmon->wh / n;
-    if (h < curmon->bh)
-        h = curmon->wh;
 
-    for (i = 0, c = nexttiled(c->next); c; c = nexttiled(c->next), i++) {
+    for (i = 0, c = nexttiled(m->next); c; c = nexttiled(c->next)) {
         if (c->mon != curmon || c->isfloating) continue;
         resize(c, x, y, w - 2 * c->bw, ((i + 1 == n)
                ? curmon->wy + curmon->wh - y - 2 * c->bw : h - 2 * c->bw));
         if (h != curmon->wh)
             y = c->y + HEIGHT(c);
+        i++;
     }
 }
 
