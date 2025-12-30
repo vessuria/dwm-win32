@@ -1247,10 +1247,16 @@ setbar(HINSTANCE hInstance, Monitor *m) {
 
 void
 showclientinfo(const Arg *arg) {
-    HWND hwnd = GetForegroundWindow();
-    wchar_t buffer[5000];
-    swprintf(buffer, sizeof(buffer)/sizeof(buffer[0]), L"ClassName:  %s\nTitle:  %s", getclientclassname(hwnd), getclienttitle(hwnd));
-    MessageBoxW(NULL, buffer, L"Window class", MB_OK);
+    if (!sel) return;
+    wchar_t buffer[1024];
+    swprintf(buffer, LENGTH(buffer),
+        L"Title: %s\nClass: %s\nProcess: %s\n\nFloating: %s\nTags: %u",
+        getclienttitle(sel->hwnd),
+        getclientclassname(sel->hwnd),
+        sel->processname,
+        sel->isfloating ? L"Yes" : L"No",
+        sel->tags);
+    MessageBoxW(NULL, buffer, L"client info", MB_OK | MB_ICONINFORMATION);
 }
 
 void
