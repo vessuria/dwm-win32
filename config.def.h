@@ -17,6 +17,7 @@ static const unsigned int textmargin  = 15;       /* margin for the text display
 static bool showbar                   = true;     /* false means no bar */
 static bool topbar                    = true;     /* false means bottom bar */
 static bool roundcorners              = false;    /* false means no round corners (Windows 11) */
+static bool focusonclick              = true;
 static bool showexploreronstart       = false;    /* false means do not show explorer/task bar on start */
 
 /* tagging */
@@ -85,7 +86,8 @@ static Key keys[] = {
     { MODKEY|MOD_CONTROL,           VK_RETURN,      zoom,                {0} },
     { MODKEY,                       VK_TAB,         view,                {0} },
     { MODKEY|MOD_SHIFT,             'C',            killclient,          {0} },
-	{ MODKEY,                       VK_OEM_PERIOD,  focusmon,            {.i = +1 } },
+    { MODKEY|MOD_CONTROL,           'F',            togglefocushover,    {0} },
+    { MODKEY,                       VK_OEM_PERIOD,  focusmon,            {.i = +1 } },
     { MODKEY,                       VK_OEM_COMMA,   focusmon,            {.i = -1 } },
     { MODKEY|MOD_SHIFT,             VK_OEM_PERIOD,  sendmon,             {.i = +1 } },
     { MODKEY|MOD_SHIFT,             VK_OEM_COMMA,   sendmon,             {.i = -1 } },

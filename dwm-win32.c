@@ -193,6 +193,7 @@ static void tile(void);
 static void togglebar(const Arg *arg);
 static void toggleexplorer(const Arg *arg);
 static void togglefloating(const Arg *arg);
+static void togglefocushover(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
 static void unmanage(Client *c);
@@ -987,16 +988,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 c->ignore = false;
                         }
                         break;
-                    case HSHELL_WINDOWACTIVATED:
-                        if (c) {
-                            Client *t = sel;
-                            managechildwindows(c);
+                        case HSHELL_WINDOWACTIVATED:
+                            if (c) {
+                                Client *t = sel;
+                                managechildwindows(c);
 
-                            update_client_monitor(c);
+                                update_client_monitor(c);
 
-                            setselected(c);
+                                POINT pt;
+                                GetCursorPos(&pt);
+                                if (monitor_from_point(pt) == c->mon)
+                                    selmon = c->mon;
 
-                            if (t && (t->isminimized = IsIconic(t->hwnd))) {
+                                 setselected(c);
+
+                                if (t && (t->isminimized = IsIconic(t->hwnd))) {
                                 arrange();
                             }
                             if (sel && sel->isminimized) {
@@ -1036,7 +1042,7 @@ wineventproc(HWINEVENTHOOK heventhook, DWORD event, HWND hwnd, LONG object, LONG
     }
 }
 
-BOOL CALLBACK 
+BOOL CALLBACK
 scan(HWND hwnd, LPARAM lParam) {
     Client *c = getclient(hwnd);
     if (c)
@@ -1120,8 +1126,11 @@ setup(HINSTANCE hInstance) {
     for (unsigned int i = 0; i < LENGTH(colorwinelements); i++)
         colors[0][i] = GetSysColor(colorwinelements[i]);
     
-    SetSysColors(LENGTH(colorwinelements), colorwinelements, colors[1]); 
-    
+    SetSysColors(LENGTH(colorwinelements), colorwinelements, colors[1]);
+
+    SystemParametersInfoW(SPI_SETACTIVEWINDOWTRACKING, 0, (void *)(INT_PTR)!focusonclick, 0);
+    SystemParametersInfoW(SPI_SETACTIVEWNDTRKTIMEOUT, 0, (void *)(INT_PTR)0, 0);
+
     HWND hwnd = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hwnd)
         setvisibility(hwnd, showexploreronstart);
@@ -1156,7 +1165,7 @@ setup(HINSTANCE hInstance) {
     /* initial scan of windows */
     EnumWindows(scan, 0);
 
-    selmon = mons;
+    if (!selmon) selmon = mons;
 
     grabkeys(dwmhwnd);
 
@@ -1352,6 +1361,13 @@ togglefloating(const Arg *arg) {
     if (sel->isfloating)
         resize(sel, sel->x, sel->y, sel->w, sel->h);
     arrange();
+}
+
+void
+togglefocushover(const Arg *arg) {
+    focusonclick = !focusonclick;
+    SystemParametersInfoW(SPI_SETACTIVEWINDOWTRACKING, 0, (void *)(INT_PTR)!focusonclick, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+    SystemParametersInfoW(SPI_SETACTIVEWNDTRKTIMEOUT, 0, (void *)(INT_PTR)0, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 }
 
 void
