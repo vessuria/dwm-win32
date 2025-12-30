@@ -139,6 +139,7 @@ struct Monitor {
     HWND barhwnd;
     Monitor *next;
 
+    float mfact;
     unsigned int tagset[2];
     unsigned int seltags;
     Layout *lt[9]; /* Layouts (and max size) */
@@ -1092,12 +1093,12 @@ setlayout(const Arg *arg) {
 void
 setmfact(const Arg *arg) {
     float f;
-    if (!arg || !mon_get_layout(selmon, selmon->sellt)->arrange)
+    if (!arg || !selmon || !mon_get_layout(selmon, selmon->sellt)->arrange)
         return;
-    f = arg->f < 1.0 ? arg->f + mfact : arg->f - 1.0;
+    f = arg->f < 1.0 ? arg->f + selmon->mfact : arg->f - 1.0;
     if (f < 0.1 || f > 0.9)
         return;
-    mfact = f;
+    selmon->mfact = f;
     arrange();
 }
 
@@ -1211,6 +1212,7 @@ setbar(HINSTANCE hInstance, Monitor *m) {
     m->tagset[1] = tagset[1];
     m->lt[0] = &layouts[0];
     m->lt[1] = &layouts[1 % LENGTH(layouts)];
+    m->mfact = mfact;
 
     /* calculate width of the largest layout symbol */
     dc.hdc = GetWindowDC(m->barhwnd);
@@ -1296,12 +1298,8 @@ tile(void) {
         return;
 
     /* master */
-    c = nexttiled(clients);
-    while (c && (c->mon != curmon || c->isfloating)) c = c->next;
-    if (!c) return;
-
-    int mw = (int)(mfact * curmon->ww);
-    resize(c, curmon->wx, curmon->wy, (n == 1 ? curmon->ww : mw) - 2 * c->bw, curmon->wh - 2 * c->bw);
+    int mw = (n == 1) ? curmon->ww : (int)(curmon->mfact * curmon->ww);
+    resize(m, curmon->wx, curmon->wy, mw - 2 * m->bw, curmon->wh - 2 * m->bw);
 
     if (--n == 0)
         return;
