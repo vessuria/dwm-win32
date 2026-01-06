@@ -268,6 +268,25 @@ mon_get_layout(Monitor *m, unsigned int idx) {
     return lt[0];
 }
 
+static bool
+getframebounds(HWND hwnd, RECT *insets) {
+    if (!insets || !IsWindow(hwnd)) return false;
+
+    RECT wr = {0};
+    RECT efb = {0};
+
+    if (!GetWindowRect(hwnd, &wr)) return false;
+
+    HRESULT hr = DwmGetWindowAttribute(hwnd, 9, &efb, sizeof(efb));
+    if (FAILED(hr)) return false;
+
+    insets->left   = efb.left - wr.left;
+    insets->top    = efb.top - wr.top;
+    insets->right  = wr.right - efb.right;
+    insets->bottom = wr.bottom - efb.bottom;
+    return true;
+}
+
 void
 applyrules(Client *c) {
     unsigned int i;
@@ -935,6 +954,20 @@ resize(Client *c, int x, int y, int w, int h) {
         c->y = y;
         c->w = w;
         c->h = h;
+
+        int px = c->x;
+        int py = c->y;
+        int pw = c->w;
+        int ph = c->h;
+
+        RECT in = {0};
+        if (getframebounds(c->hwnd, &in)) {
+            px -= in.left;
+            py -= in.top;
+            pw += (in.left + in.right);
+            ph += (in.top + in.bottom);
+        }
+
         /* If the window can't be managed, we assign it as a floating window. */
         if (!SetWindowPos(c->hwnd, HWND_TOP, c->x, c->y, c->w, c->h, SWP_NOACTIVATE))
             c->isfloating = true;
